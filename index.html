@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FAB TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Mono+One&family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: комната → деревянный ящик (экран + боковая панель с ручками) → пульт под ним. Вкладка настроек — отдельный «сервисный режим». */
+:root{
+  --room:#14100d; --room2:#1f1813;
+  --wood:#6a3f22; --wood-d:#3a2112; --wood-l:#8a5630;
+  --plastic:#1d1a17; --bezel:#0b0a09;
+  --phos:#ffb547; --phos-d:#a86a14; --cyan:#86e6ff; --red:#ff5a3c; --lime:#c6f36b;
+  --paper:#efe5d3; --muted:#a6977f; --line:#3a2f26; --field:#100d0b;
+  --f-logo:"Rubik Mono One","Arial Black",Impact,sans-serif;
+  --f-osd:"Pixelify Sans","Courier New",monospace;
+  --f-body:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:radial-gradient(120% 80% at 50% 0%,var(--room2),var(--room) 70%);
+  color:var(--paper); font:14px/1.5 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:18px 40px;
+}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--phos);outline-offset:2px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font:22px/1 var(--f-logo);letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:#3a2a1c;box-shadow:inset 0 0 0 1px #000}
+.brand .dot.on{background:var(--red);box-shadow:0 0 10px var(--red)}
+.tabs{display:flex;gap:4px;background:#0c0a08;padding:4px;border-radius:10px;border:1px solid var(--line)}
+.tabs button{background:none;border:0;padding:8px 14px;border-radius:7px;font:600 13px var(--f-osd);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--phos);color:#1b1206}
+
+/* TV */
+.tv{
+  display:grid;grid-template-columns:1fr 150px;gap:18px;
+  padding:22px;border-radius:26px;
+  background:
+    repeating-linear-gradient(92deg,rgba(0,0,0,.0) 0 7px,rgba(0,0,0,.09) 7px 9px,rgba(255,255,255,.03) 9px 13px),
+    linear-gradient(160deg,var(--wood-l),var(--wood) 35%,var(--wood-d));
+  box-shadow:0 30px 60px -20px #000,inset 0 2px 0 rgba(255,255,255,.12),inset 0 -6px 14px rgba(0,0,0,.45);
+  position:relative;
+}
+.tv::after{content:"";position:absolute;left:12%;right:12%;bottom:-14px;height:14px;background:linear-gradient(#2a180c,#120a05);border-radius:0 0 8px 8px;z-index:-1}
+.bezel{background:linear-gradient(#24201c,var(--bezel));padding:16px;border-radius:22px;box-shadow:inset 0 0 0 2px #000,inset 0 4px 10px rgba(255,255,255,.05)}
+.screen{
+  position:relative;aspect-ratio:4/3;max-width:100%;border-radius:28px/22px;overflow:hidden;background:#060606;
+  box-shadow:inset 0 0 60px rgba(0,0,0,.9);isolation:isolate;
+}
+.screen:fullscreen{border-radius:0;aspect-ratio:auto;width:100vw;height:100vh}
+.screen iframe{position:absolute;inset:0;width:100%;height:100%;border:0;z-index:1;background:#000}
+#noise{position:absolute;inset:0;width:100%;height:100%;z-index:5;image-rendering:pixelated;opacity:.2;pointer-events:none;transition:opacity .25s}
+.screen.playing #noise{opacity:0}
+.fx{position:absolute;inset:0;pointer-events:none;z-index:8}
+.scan{background:repeating-linear-gradient(0deg,rgba(0,0,0,.28) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+.vig{background:radial-gradient(120% 100% at 50% 50%,transparent 60%,rgba(0,0,0,.65));}
+.glare{background:radial-gradient(60% 40% at 30% 18%,rgba(255,255,255,.07),transparent 70%)}
+.screen.playing .scan{opacity:.35}
+.screen.roll .layer{animation:roll .45s steps(6) 1}
+@keyframes roll{0%{transform:translateY(0) skewX(0)}30%{transform:translateY(-18%) skewX(4deg)}60%{transform:translateY(9%) skewX(-3deg)}100%{transform:none}}
+
+.layer{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6%;gap:14px}
+.layer h2,.layer p{margin:0}
+.osd-t{font:600 clamp(12px,2.2vw,18px)/1.2 var(--f-osd);letter-spacing:.12em;text-transform:uppercase;color:var(--phos);text-shadow:0 0 8px rgba(255,181,71,.6)}
+
+/* idle */
+.idle .big{font:clamp(34px,8vw,84px)/.95 var(--f-logo);color:var(--paper);text-shadow:3px 0 var(--red),-3px 0 var(--cyan)}
+.idle .hint{font:clamp(12px,1.9vw,15px)/1.4 var(--f-osd);color:var(--muted)}
+
+/* ident */
+.ident{background:#0a0807;overflow:hidden}
+.bars{position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,1fr);opacity:.85}
+.bars i{display:block}
+.ident .logo{position:relative;font:clamp(44px,11vw,120px)/.9 var(--f-logo);color:#fff;mix-blend-mode:normal;text-shadow:4px 0 var(--red),-4px 0 var(--cyan),0 0 30px rgba(0,0,0,.8)}
+.ident.go .bars{animation:barsOut 2.4s cubic-bezier(.7,0,.3,1) forwards}
+.ident.go .logo{animation:logoIn 2.4s cubic-bezier(.2,.8,.2,1) forwards}
+.ident.go .tag{animation:tagIn 2.4s ease forwards}
+.ident .tag{position:relative;font:600 clamp(12px,2vw,17px) var(--f-osd);color:var(--phos);letter-spacing:.08em;background:#000;padding:4px 10px;opacity:0}
+@keyframes barsOut{0%{clip-path:inset(0 0 0 0)}35%{clip-path:inset(0 0 0 0)}60%{clip-path:inset(48% 0 48% 0)}100%{clip-path:inset(50% 0 50% 0)}}
+@keyframes logoIn{0%{transform:scale(3) rotate(-8deg);opacity:0;filter:blur(8px)}30%{transform:scale(1) rotate(-3deg);opacity:1;filter:none}45%{transform:scale(1.04) rotate(-3deg) translateX(-6px)}50%{transform:scale(1) rotate(-3deg) translateX(5px)}100%{transform:scale(1) rotate(-3deg)}}
+@keyframes tagIn{0%,40%{opacity:0;transform:translateY(10px)}60%,100%{opacity:1;transform:none}}
+
+/* roulette */
+.roul{background:radial-gradient(80% 80% at 50% 50%,#1b130b,#070605)}
+.reel-win{position:relative;width:min(92%,560px);height:calc(var(--ih) * 5);overflow:hidden;
+  -webkit-mask:linear-gradient(transparent,#000 30%,#000 70%,transparent);mask:linear-gradient(transparent,#000 30%,#000 70%,transparent);--ih:clamp(34px,7.2vw,58px)}
+.reel{position:absolute;left:0;right:0;top:0;will-change:transform}
+.reel-item{height:var(--ih);display:flex;align-items:center;justify-content:center;font:clamp(14px,3.4vw,28px)/1 var(--f-logo);color:#6d5a44;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}
+.reel-item.hot{color:var(--paper)}
+.reel-item.win{color:var(--phos);text-shadow:0 0 14px rgba(255,181,71,.8);animation:blink .18s steps(2) 5}
+@keyframes blink{50%{opacity:.2}}
+.marker{position:absolute;left:50%;transform:translateX(-50%);width:min(96%,590px);height:var(--ih);top:50%;margin-top:calc(var(--ih) / -2);border-top:2px solid var(--phos);border-bottom:2px solid var(--phos);pointer-events:none;--ih:clamp(34px,7.2vw,58px)}
+.marker::before,.marker::after{content:"▶";position:absolute;top:50%;transform:translateY(-50%);color:var(--phos);font-size:clamp(12px,2.4vw,20px)}
+.marker::before{left:-2px}.marker::after{right:-2px;content:"◀"}
+.roul-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%}
+
+/* next up */
+.next{background:#060505}
+.next .title{font:clamp(22px,5.4vw,52px)/1.05 var(--f-logo);color:var(--paper);text-wrap:balance}
+.next .meta{font:600 clamp(13px,2.2vw,18px) var(--f-osd);color:var(--cyan);letter-spacing:.06em}
+.next .clock{position:absolute;right:5%;top:5%;font:600 clamp(12px,2vw,16px) var(--f-osd);color:var(--lime)}
+
+/* empty */
+.empty p{font:clamp(13px,2.2vw,17px)/1.45 var(--f-osd);color:var(--paper);max-width:32ch}
+
+/* osd over video */
+.bug{position:absolute;right:4%;top:4%;z-index:7;font:clamp(11px,1.8vw,16px)/1 var(--f-logo);color:rgba(255,255,255,.55);pointer-events:none;text-shadow:1px 0 rgba(255,90,60,.6),-1px 0 rgba(134,230,255,.6)}
+.lower{position:absolute;left:4%;bottom:6%;z-index:7;pointer-events:none;display:flex;flex-direction:column;gap:4px;align-items:flex-start;opacity:0;transform:translateX(-12px);transition:.4s}
+.lower.show{opacity:1;transform:none}
+.lower b{font:clamp(13px,2.4vw,20px)/1.1 var(--f-logo);background:var(--phos);color:#1b1206;padding:6px 10px}
+.lower span{font:600 clamp(11px,1.8vw,14px) var(--f-osd);background:#000;color:var(--paper);padding:3px 8px;letter-spacing:.05em}
+
+/* side panel */
+.side{display:flex;flex-direction:column;align-items:center;gap:16px;padding:14px 10px;border-radius:16px;background:linear-gradient(#26221e,#141210);box-shadow:inset 0 0 0 1px #000,inset 0 2px 0 rgba(255,255,255,.06)}
+.plate{font:12px/1 var(--f-logo);color:#d9c9a8;letter-spacing:.04em;padding:6px 8px;border:1px solid #574634;border-radius:4px;background:#0f0d0b;text-align:center}
+.knob-g{display:flex;flex-direction:column;align-items:center;gap:6px}
+.knob-g small{font:600 10px var(--f-osd);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.knob{width:74px;height:74px;border-radius:50%;border:0;padding:0;position:relative;
+  background:radial-gradient(circle at 35% 30%,#58504a,#1c1916 60%,#0b0a09);box-shadow:0 4px 8px #000,inset 0 0 0 3px #0a0908;transition:transform .35s cubic-bezier(.3,1.6,.5,1)}
+.knob::after{content:"";position:absolute;left:50%;top:7px;width:4px;height:22px;margin-left:-2px;border-radius:2px;background:var(--phos)}
+.knob.small{width:52px;height:52px}.knob.small::after{height:14px;top:6px}
+.knob-labels{display:flex;justify-content:space-between;width:100%;gap:6px;font:600 10px var(--f-osd);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.knob-labels .on{color:var(--phos)}
+.grille{width:100%;flex:1;min-height:60px;border-radius:8px;background:repeating-linear-gradient(0deg,#0b0a09 0 3px,#2a2520 3px 5px)}
+.led{width:10px;height:10px;border-radius:50%;background:#3b1a12;box-shadow:inset 0 0 0 1px #000}
+.led.on{background:var(--red);box-shadow:0 0 8px var(--red)}
+
+/* remote */
+.remote{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:14px;border-radius:16px;background:#0e0c0a;border:1px solid var(--line)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:0;border-radius:10px;padding:11px 16px;font:600 14px var(--f-osd);letter-spacing:.06em;text-transform:uppercase;background:#2a241f;color:var(--paper);box-shadow:0 3px 0 #000,inset 0 1px 0 rgba(255,255,255,.08);transition:transform .08s}
+.btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
+.btn.pri{background:var(--red);color:#1a0703}
+.btn.pri.off{background:#2a241f;color:var(--red)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.seg{display:flex;background:#1b1714;border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;background:none;padding:8px 12px;border-radius:8px;font:600 13px var(--f-osd);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--phos);color:#1b1206}
+.status{font:12px/1.4 var(--f-body);color:var(--muted);min-width:0;flex:1 1 260px}
+.status b{color:var(--paper);font-weight:500}
+.status .api{color:var(--lime)}
+.status .api.no{color:var(--muted)}
+
+/* settings */
+.settings{display:flex;flex-direction:column;gap:22px}
+.sec{background:#0e0c0a;border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.sec-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.sec h3{margin:0;font:16px/1.2 var(--f-logo);color:var(--phos)}
+.sec p.note{margin:0;color:var(--muted);font-size:13px;max-width:70ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:#15120f;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.card-h{display:flex;gap:8px;align-items:center}
+input[type=text],input[type=number],input[type=url],textarea{
+  width:100%;min-width:0;background:var(--field);color:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:13px/1.4 var(--f-body)}
+.card-h input{font:600 14px var(--f-osd);letter-spacing:.02em}
+textarea{resize:vertical;min-height:84px;white-space:pre;overflow-x:auto}
+.badge{flex:none;font:600 11px var(--f-osd);color:#1b1206;background:var(--lime);border-radius:6px;padding:3px 7px;white-space:nowrap}
+.badge.zero{background:#3a3028;color:var(--muted)}
+.foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
+.foot label{display:flex;align-items:center;gap:6px}
+.foot input[type=number]{width:70px;padding:5px 8px}
+.mini{border:1px solid var(--line);background:#1d1915;border-radius:7px;padding:5px 10px;font:600 12px var(--f-osd);color:var(--paper)}
+.mini.danger{color:var(--red)}
+.mini.armed{background:var(--red);color:#1a0703;border-color:var(--red)}
+.warn{color:var(--red);font-size:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row > input{flex:1 1 220px}
+.small-note{font-size:12px;color:var(--muted)}
+
+@media (max-width:720px){
+  .tv{grid-template-columns:1fr;padding:14px;border-radius:20px}
+  .bezel{padding:10px;border-radius:16px}
+  .side{flex-direction:row;flex-wrap:wrap;justify-content:space-around;padding:10px}
+  .grille{display:none}
+  .knob{width:56px;height:56px}.knob::after{height:16px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><span class="dot" id="onAir"></span><span data-name>FAB TV</span></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="tv">Эфир</button>
+      <button role="tab" aria-selected="false" data-tab="set">Настройки</button>
+    </div>
+  </div>
+
+  <!-- ЭФИР -->
+  <section id="viewTv" class="wrap" style="gap:16px">
+    <div class="tv">
+      <div class="bezel">
+        <div class="screen" id="screen">
+          <iframe id="player" hidden allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write" allowfullscreen title="Видео"></iframe>
+          <canvas id="noise" width="160" height="120"></canvas>
+
+          <div class="layer idle" id="L-idle">
+            <p class="osd-t">Канал 9 · нет сигнала</p>
+            <h2 class="big" data-name>FAB TV</h2>
+            <p class="hint">Выбери «Сериалы» или «Фильмы» и жми «Включить эфир»</p>
+          </div>
+
+          <div class="layer ident" id="L-ident" hidden>
+            <div class="bars"><i style="background:#c0c0c0"></i><i style="background:#c0c000"></i><i style="background:#00c0c0"></i><i style="background:#00c000"></i><i style="background:#c000c0"></i><i style="background:#c00000"></i><i style="background:#0000c0"></i></div>
+            <h2 class="logo" data-name>FAB TV</h2>
+            <p class="tag" id="tagline">эфир по кнопке</p>
+          </div>
+
+          <div class="layer roul" id="L-roul" hidden>
+            <p class="osd-t" id="roulHead">Что дальше?</p>
+            <div class="roul-wrap">
+              <div class="reel-win" id="reelWin"><div class="reel" id="reel"></div></div>
+              <div class="marker"></div>
+            </div>
+          </div>
+
+          <div class="layer next" id="L-next" hidden>
+            <span class="clock" id="clock">00:00</span>
+            <p class="osd-t">Сейчас в эфире</p>
+            <h2 class="title" id="nextTitle">—</h2>
+            <p class="meta" id="nextMeta"></p>
+          </div>
+
+          <div class="layer empty" id="L-empty" hidden>
+            <p class="osd-t">Технический перерыв</p>
+            <p id="emptyText">В этом режиме нечего показывать. Добавь ссылки с Рутуба во вкладке «Настройки».</p>
+          </div>
+
+          <div class="bug" id="bug" hidden data-name>FAB TV</div>
+          <div class="lower" id="lower"><b id="lowTitle"></b><span id="lowMeta"></span></div>
+
+          <div class="fx scan"></div><div class="fx vig"></div><div class="fx glare"></div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="plate" data-name>FAB TV</div>
+        <div class="knob-g">
+          <small>Режим</small>
+          <button class="knob" id="modeKnob" aria-label="Переключить режим"></button>
+          <div class="knob-labels"><span data-k="series">Сер.</span><span data-k="movies">Фильм</span></div>
+        </div>
+        <div class="knob-g">
+          <small>Канал</small>
+          <button class="knob small" id="skipKnob" aria-label="Пропустить"></button>
+        </div>
+        <div class="grille"></div>
+        <span class="led" id="led"></span>
+      </div>
+    </div>
+
+    <div class="remote">
+      <div class="btns">
+        <button class="btn pri" id="powerBtn">Включить эфир</button>
+        <button class="btn" id="skipBtn" disabled>Пропустить ⏭</button>
+        <button class="btn" id="fsBtn">На весь экран</button>
+        <button class="btn" id="soundBtn" aria-pressed="true">Звук помех: вкл</button>
+      </div>
+      <div class="seg" role="group" aria-label="Режим">
+        <button data-mode="series" aria-pressed="true">Сериалы</button>
+        <button data-mode="movies" aria-pressed="false">Фильмы</button>
+      </div>
+      <div class="status" id="status">Телик выключен. <span class="api no" id="apiState"></span></div>
+    </div>
+  </section>
+
+  <!-- НАСТРОЙКИ -->
+  <section id="viewSet" class="settings" hidden>
+    <div class="sec">
+      <div class="sec-h"><h3>Канал</h3></div>
+      <div class="row">
+        <input type="text" id="chName" maxlength="24" aria-label="Название канала">
+        <button class="mini" id="resetAll">Сбросить прогресс всех сериалов</button>
+      </div>
+      <p class="note">Ссылки принимаются в любом виде: rutube.ru/video/…, rutube.ru/play/embed/…, приватные с ?p=… или просто 32-значный ID. После ссылки можно дописать пометку через пробел, например «… 1 сезон 3 серия».</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h3>Сериалы</h3><button class="mini" id="addSeries">+ Сериал</button></div>
+      <p class="note">Одна ссылка на строку, строго по порядку серий. «Следующая» — какая серия пойдёт, когда рулетка выберет этот сериал. Досмотренные до конца сериалы выпадают из рулетки, пока не нажмёшь «С начала».</p>
+      <div class="grid" id="seriesList"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h3>Фильмы</h3><button class="mini" id="addMovie">+ Фильм</button></div>
+      <div class="grid" id="moviesList"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h3>Бэкап</h3></div>
+      <p class="note">Всё хранится в этом браузере. Чтобы перенести на другой комп или не потерять при чистке браузера, скопируй бэкап и сохрани куда-нибудь.</p>
+      <textarea id="backup" rows="5" spellcheck="false" aria-label="Бэкап"></textarea>
+      <div class="row">
+        <button class="mini" id="bkCopy">Скопировать бэкап</button>
+        <button class="mini" id="bkLoad">Загрузить из поля</button>
+        <span class="small-note" id="bkMsg"></span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const uid = () => Math.random().toString(36).slice(2, 9);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- данные ---------- */
+const V = id => "https://rutube.ru/video/" + id + "/";
+const SEED_SERIES = [
+  ["Рик и Морти", [V("34a8165a79156c7617b1a30e91f16b9a")+" 1x01", V("6ed75055062c0b1b37c21b3b3d25ac8c")+" 1x02"]],
+  ["Гравити Фолз", [V("1b88c3594701db715b9ac9698b5f843b")+" 1x01", V("775877dafb44471f00d6edf4b5b8160d")+" 1x02"]],
+  ["Удивительный мир Гамбола", [V("146aa99a919cd7e7425ee7bc1579b53c")+" 1x01-02", V("6d00418a535b6b1a050275508276b567")+" 1x03-04", V("bf0149a562a16d18069e2e5406f3af00")+" 1x05-06"]],
+  ["Стар против сил зла", [V("05852e4bb5bddfc5919b3f7ca8d70eb6")+" 1x01-02", V("f85f947b795468b440488f23b753cd34")+" 1x03-04"]],
+  ["Дарья", [V("d8755d66b3522bfa796db672723d9c0c")+" 3x13 (начало не нашёл)", V("c2688926db80b106d5a998be6555409e")+" 5x12"]],
+  ["Даунтаун", [V("df5ed7698c32d95353d0e628bfa278bb")+" англ., порядок не проверен", V("e5126da4c2d4b73e2123417cb5e0c8e0")+" англ.", V("f2d1ea20116512e5d6a56a6567be6b2b")+" англ. ep07"]],
+  ["Все ненавидят Криса", [V("38961358f5e028b43c077a14bed8f33a")+" 1x01", V("05636e801f3c32329d63cdd0fa8099b3")+" 1x02"]],
+  ["Офис", [V("39040239c147db724f929593fc9afd27")+" 1x01", V("0cfb6df504d573f1e92fc4111147643d")+" 1x02"]],
+  ["По ту сторону изгороди", [V("9c39805b7a2f313d2a7d0fb928900147")+" 1x01", V("5ec8f8eacd754a29b3acfab494f9bd8d")+" 1x02"]],
+  ["Конь БоДжек", [V("e1bd3c77371c0b7ddca18191e87bee17")+" 1x01", V("834c5cc5b4cd2f35aa0fe12c50c2f8a4")+" 1x02"]],
+  ["Финальный космос", [V("57ff5851981c387ec054e29f12cb6855")+" 1x02 (1-ю не нашёл)", V("b1ee0a40812ff3264ac8a95c7220a276")+" 1x05"]],
+  ["Солнечные противоположности", [V("3d8df70593fd321da88f13186e2d71cf")+" 1x01"]],
+];
+const SEED_MOVIES = ["Однажды в Голливуде","Грязь","Синг Стрит","Бойцовский клуб","Волк с Уолл-стрит","Славные парни","Почти знаменит","Донни Дарко","Под кайфом и в смятении","Большой Лебовски"];
+
+function defaults(){
+  return {
+    v:1, name:"FAB TV", mode:"series", sound:true, lastId:null,
+    series: SEED_SERIES.map(([title, links]) => ({id:uid(), title, links:links.slice(), pos:0})),
+    movies: SEED_MOVIES.map(title => ({id:uid(), title, link:"", plays:0})),
+  };
+}
+const KEY = "fabtv.v1";
+let S;
+try { S = JSON.parse(localStorage.getItem(KEY)); } catch(e) { S = null; }
+if (!S || !Array.isArray(S.series) || !Array.isArray(S.movies)) S = defaults();
+let saveT;
+function save(){ clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }, 200); }
+
+/* ссылка → embed */
+function toEmbed(line){
+  if (!line) return null;
+  const s = String(line).trim();
+  const m = s.match(/rutube\.ru\/(?:video|play\/embed|shorts)\/(?:private\/)?([0-9a-f]{32})/i) || s.match(/^([0-9a-f]{32})(?:\s|$)/i);
+  if (!m) return null;
+  const p = (s.match(/[?&]p=([\w-]+)/) || [])[1];
+  return "https://rutube.ru/play/embed/" + m[1].toLowerCase() + (p ? "?p=" + p : "");
+}
+const lines = txt => (Array.isArray(txt) ? txt : String(txt).split(/\r?\n/)).map(x => x.trim()).filter(Boolean);
+const validEps = s => lines(s.links).map(toEmbed).filter(Boolean);
+
+/* ---------- звук ---------- */
+let AC, noiseBuf;
+function ac(){
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return null; } }
+  if (AC.state === "suspended") AC.resume();
+  return AC;
+}
+function hiss(ms = 400, vol = .18){
+  if (!S.sound) return; const a = ac(); if (!a) return;
+  if (!noiseBuf){ noiseBuf = a.createBuffer(1, a.sampleRate * 2, a.sampleRate); const d = noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1; }
+  const src = a.createBufferSource(), g = a.createGain(), f = a.createBiquadFilter();
+  src.buffer = noiseBuf; f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = .6;
+  const t = a.currentTime; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + ms/1000);
+  src.connect(f).connect(g).connect(a.destination); src.start(t); src.stop(t + ms/1000 + .05);
+}
+function blip(freq = 900, ms = 28, vol = .05, type = "square"){
+  if (!S.sound) return; const a = ac(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain(), t = a.currentTime;
+  o.type = type; o.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + ms/1000);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + ms/1000 + .02);
+}
+function chime(){ [523, 659, 784, 1047].forEach((f,i) => setTimeout(() => blip(f, 260, .06, "triangle"), i*110)); }
+
+/* ---------- шум на экране ---------- */
+const cv = $("#noise"), cx = cv.getContext("2d");
+const img = cx.createImageData(cv.width, cv.height);
+let noiseOn = true;
+function drawNoise(){
+  if (noiseOn){
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4){ const v = Math.random()*255|0; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
+    cx.putImageData(img, 0, 0);
+    const y = (performance.now()/12) % cv.height; cx.fillStyle = "rgba(255,255,255,.12)"; cx.fillRect(0, y, cv.width, 6);
+  }
+  requestAnimationFrame(drawNoise);
+}
+requestAnimationFrame(drawNoise);
+const screen = $("#screen");
+async function staticBurst(ms = 500){
+  noiseOn = true; screen.classList.remove("playing");
+  cv.style.opacity = 1; screen.classList.add("roll"); hiss(ms);
+  await sleep(ms);
+  cv.style.opacity = ""; screen.classList.remove("roll");
+}
+
+/* ---------- слои ---------- */
+const layers = {idle:$("#L-idle"), ident:$("#L-ident"), roul:$("#L-roul"), next:$("#L-next"), empty:$("#L-empty")};
+function show(name){ for (const k in layers) layers[k].hidden = k !== name; }
+
+/* ---------- эфир ---------- */
+const player = $("#player");
+let run = 0, on = false, playing = null; // playing: {item, kind, label, startedAt}
+const TAGS = ["эфир по кнопке","без рекламы, с душой","не переключайтесь","канал, который никто не заказывал","лампово с 1987","сигнал ловится только у своих","смотрим, пока не уснём"];
+
+async function cycle(){
+  const my = ++run;
+  const alive = () => my === run && on;
+  stopPlayer();
+  await staticBurst(450); if (!alive()) return;
+
+  // заставка
+  $("#tagline").textContent = TAGS[Math.random()*TAGS.length|0];
+  show("ident"); layers.ident.classList.remove("go"); void layers.ident.offsetWidth; layers.ident.classList.add("go");
+  chime(); await sleep(RM ? 600 : 2500); if (!alive()) return;
+
+  // пул
+  const kind = S.mode;
+  const pool = kind === "series"
+    ? S.series.filter(s => s.pos < validEps(s).length)
+    : S.movies.filter(m => toEmbed(m.link));
+  if (!pool.length){
+    $("#emptyText").textContent = kind === "series"
+      ? "Сериалы кончились: либо нет ссылок, либо всё досмотрено. Добавь серии или нажми «С начала» в настройках."
+      : "Ни у одного фильма нет ссылки. Вставь ссылки с Рутуба во вкладке «Настройки».";
+    show("empty"); setStatus("Нечего показывать в режиме «" + (kind === "series" ? "Сериалы" : "Фильмы") + "».");
+    return;
+  }
+  let cands = pool.length > 1 ? pool.filter(p => p.id !== S.lastId) : pool;
+  const chosen = cands[Math.random()*cands.length|0];
+
+  await staticBurst(220); if (!alive()) return;
+  show("roul"); $("#roulHead").textContent = kind === "series" ? "Крутим сериалы" : "Крутим фильмы";
+  setStatus("Рулетка крутится…");
+  await spin(pool, chosen, alive); if (!alive()) return;
+  await sleep(RM ? 200 : 900); if (!alive()) return;
+
+  // что показываем
+  let url, label;
+  if (kind === "series"){
+    const eps = validEps(chosen), raw = lines(chosen.links).filter(l => toEmbed(l));
+    const idx = chosen.pos; url = eps[idx];
+    const note = raw[idx].replace(/^\S+\s*/, "");
+    label = "Серия " + (idx+1) + " из " + eps.length + (note ? " · " + note : "");
+    chosen.pos = idx + 1;
+  } else {
+    url = toEmbed(chosen.link); chosen.plays = (chosen.plays||0) + 1; label = "Полный метр";
+  }
+  S.lastId = chosen.id; save(); renderSettingsBadges();
+
+  $("#nextTitle").textContent = chosen.title; $("#nextMeta").textContent = label;
+  $("#clock").textContent = new Date().toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit"});
+  await staticBurst(180); if (!alive()) return;
+  show("next"); blip(440, 120, .05, "sine");
+  await sleep(RM ? 800 : 2000); if (!alive()) return;
+
+  await staticBurst(500); if (!alive()) return;
+  startPlayer(url, chosen, kind, label);
+}
+
+function spin(pool, chosen, alive){
+  return new Promise(res => {
+    const reel = $("#reel"), win = $("#reelWin");
+    const names = pool.map(p => p.title);
+    const seq = [];
+    const cycles = Math.max(4, Math.ceil(36 / names.length));
+    for (let c = 0; c < cycles; c++){ const sh = names.slice().sort(() => Math.random() - .5); seq.push(...sh); }
+    const target = seq.length; seq.push(chosen.title);
+    for (let i = 0; i < 3; i++) seq.push(names[Math.random()*names.length|0]);
+    reel.style.transition = "none"; reel.style.transform = "translateY(0)";
+    reel.innerHTML = seq.map(n => '<div class="reel-item">' + esc(n) + '</div>').join("");
+    const items = reel.children;
+    const h = items[0].offsetHeight, wh = win.clientHeight, off = wh/2 - h/2;
+    const y = -(target*h - off);
+    const dur = RM ? 600 : 4200 + Math.random()*800;
+    void reel.offsetHeight;
+    reel.style.transition = "transform " + dur + "ms cubic-bezier(.1,.72,.12,1)";
+    reel.style.transform = "translateY(" + y + "px)";
+    let last = -1, raf;
+    const tick = () => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(reel).transform).m42;
+      const i = Math.round((-m + off) / h);
+      if (i !== last && items[i]){ if (items[last]) items[last].classList.remove("hot"); items[i].classList.add("hot"); last = i; blip(1200, 14, .03); }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    setTimeout(() => {
+      cancelAnimationFrame(raf);
+      for (const el of items) el.classList.remove("hot");
+      if (alive()) { items[target].classList.add("win"); blip(660, 200, .06, "triangle"); setTimeout(() => blip(990, 260, .06, "triangle"), 140); }
+      res();
+    }, dur + 60);
+  });
+}
+
+/* ---------- плеер Рутуба ---------- */
+let api = {seen:false, time:0, dur:0, state:""}, lowerT, playKick;
+function startPlayer(url, item, kind, label){
+  for (const k in layers) layers[k].hidden = true;
+  noiseOn = false; screen.classList.add("playing");
+  api = {seen:false, time:0, dur:0, state:""};
+  playing = {item, kind, label, startedAt: Date.now(), done:false};
+  player.hidden = false; player.src = url;
+  $("#bug").hidden = false;
+  $("#lowTitle").textContent = item.title; $("#lowMeta").textContent = label;
+  const low = $("#lower"); low.classList.add("show"); clearTimeout(lowerT); lowerT = setTimeout(() => low.classList.remove("show"), 6000);
+  setStatus("В эфире: <b>" + esc(item.title) + "</b> · " + esc(label));
+  updateApi();
+  // несколько раз пинаем плеер «играй», пока он не ответит
+  clearInterval(playKick); let n = 0;
+  playKick = setInterval(() => { if (api.state === "playing" || ++n > 12) return clearInterval(playKick); cmd("player:play"); }, 1500);
+}
+function stopPlayer(){
+  clearInterval(playKick); clearTimeout(lowerT);
+  playing = null; player.hidden = true; player.src = "about:blank";
+  $("#bug").hidden = true; $("#lower").classList.remove("show");
+  screen.classList.remove("playing"); noiseOn = true;
+}
+function cmd(type, data = {}){ try { player.contentWindow.postMessage(JSON.stringify({type, data}), "*"); } catch(e){} }
+
+function finished(why){
+  if (!playing || playing.done) return;
+  if (Date.now() - playing.startedAt < 15000) return; // защита от ложного конца на рекламе/загрузке
+  playing.done = true;
+  setStatus("Конец показа (" + why + "). Переключаем…");
+  cycle();
+}
+window.addEventListener("message", e => {
+  if (!playing || e.source !== player.contentWindow) return;
+  let msg = e.data;
+  if (typeof msg === "string"){ try { msg = JSON.parse(msg); } catch(_) { return; } }
+  if (!msg || typeof msg.type !== "string" || !msg.type.startsWith("player:")) return;
+  const d = msg.data || {};
+  if (!api.seen){ api.seen = true; updateApi(); }
+  switch (msg.type){
+    case "player:ready": cmd("player:play"); break;
+    case "player:changeState":
+      api.state = d.state || "";
+      if (api.state === "ended" || api.state === "completed") finished("плеер");
+      else if (api.state === "stopped" && api.dur > 90 && api.time > api.dur - 5) finished("плеер");
+      break;
+    case "player:playComplete": finished("плеер"); break;
+    case "player:durationChange": if (+d.duration) api.dur = +d.duration; break;
+    case "player:currentTime":
+      api.time = +d.time || 0;
+      if (api.dur > 90 && api.time >= api.dur - .8) finished("время");
+      break;
+  }
+});
+function updateApi(){
+  const el = $("#apiState");
+  if (!playing){ el.textContent = ""; return; }
+  el.className = "api" + (api.seen ? "" : " no");
+  el.textContent = api.seen ? " · автопереход на связи" : " · жду ответа плеера…";
+}
+
+/* ---------- управление ---------- */
+function setStatus(html){ $("#status").innerHTML = html + ' <span class="api no" id="apiState"></span>'; updateApi(); }
+let wake;
+async function power(){
+  ac();
+  on = !on;
+  $("#powerBtn").textContent = on ? "Выключить" : "Включить эфир";
+  $("#powerBtn").classList.toggle("off", on);
+  $("#skipBtn").disabled = !on;
+  $("#onAir").classList.toggle("on", on); $("#led").classList.toggle("on", on);
+  if (on){
+    try { wake = await navigator.wakeLock?.request("screen"); } catch(e){}
+    cycle();
+  } else {
+    run++; stopPlayer(); await staticBurst(300); show("idle");
+    setStatus("Телик выключен.");
+    try { wake?.release(); } catch(e){}
+  }
+}
+function skip(){ if (!on) return; if (playing) playing.done = true; setStatus("Пропускаем…"); cycle(); }
+function setMode(m){
+  S.mode = m; save();
+  $$(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === m)));
+  $$(".knob-labels span").forEach(s => s.classList.toggle("on", s.dataset.k === m));
+  $("#modeKnob").style.transform = "rotate(" + (m === "series" ? -40 : 40) + "deg)";
+  blip(300, 40, .05);
+  if (on && !playing) setStatus("Режим «" + (m === "series" ? "Сериалы" : "Фильмы") + "» включится со следующего показа.");
+  else if (on) setStatus("В эфире: <b>" + esc(playing.item.title) + "</b> · дальше пойдут " + (m === "series" ? "сериалы" : "фильмы"));
+}
+$("#powerBtn").onclick = power;
+$("#skipBtn").onclick = skip;
+$("#skipKnob").onclick = () => { const k = $("#skipKnob"); k.style.transform = "rotate(" + ((parseFloat(k.dataset.r)||0) + 45) + "deg)"; k.dataset.r = (parseFloat(k.dataset.r)||0) + 45; skip(); };
+$("#modeKnob").onclick = () => setMode(S.mode === "series" ? "movies" : "series");
+$$(".seg button").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+$("#fsBtn").onclick = async () => { try { document.fullscreenElement ? await document.exitFullscreen() : await screen.requestFullscreen(); } catch(e){} };
+function paintSound(){ $("#soundBtn").textContent = "Звук помех: " + (S.sound ? "вкл" : "выкл"); $("#soundBtn").setAttribute("aria-pressed", String(S.sound)); }
+$("#soundBtn").onclick = () => { S.sound = !S.sound; save(); paintSound(); };
+
+/* ---------- вкладки ---------- */
+$$(".tabs button").forEach(b => b.onclick = () => {
+  const t = b.dataset.tab;
+  $$(".tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+  $("#viewTv").hidden = t !== "tv"; $("#viewSet").hidden = t !== "set";
+  if (t === "set") { renderSettings(); }
+});
+
+/* ---------- настройки ---------- */
+function paintName(){ $$("[data-name]").forEach(el => el.textContent = S.name || "FAB TV"); document.title = S.name || "FAB TV"; }
+$("#chName").addEventListener("input", e => { S.name = e.target.value.trim() || "FAB TV"; paintName(); save(); });
+
+function seriesBadge(s){
+  const n = validEps(s).length, bad = lines(s.links).length - n;
+  return {n, bad, text: n ? (s.pos >= n ? "досмотрен" : "серий: " + n + " · след. " + (s.pos+1)) : "нет ссылок"};
+}
+function renderSettings(){
+  $("#chName").value = S.name;
+  $("#seriesList").innerHTML = S.series.map(s => {
+    const b = seriesBadge(s);
+    return '<div class="card" data-kind="series" data-id="'+s.id+'">'+
+      '<div class="card-h"><input type="text" id="t-'+s.id+'" data-f="title" value="'+esc(s.title)+'" aria-label="Название сериала"><span class="badge'+(b.n?'':' zero')+'">'+b.text+'</span></div>'+
+      '<textarea id="l-'+s.id+'" data-f="links" rows="4" spellcheck="false" placeholder="https://rutube.ru/video/…   по одной на строку, по порядку">'+esc(lines(s.links).join("\n"))+'</textarea>'+
+      '<div class="foot"><label>Следующая <input type="number" id="p-'+s.id+'" min="1" data-f="pos" value="'+(s.pos+1)+'"></label>'+
+      '<button class="mini" data-act="reset">С начала</button><button class="mini danger" data-act="del">Удалить</button>'+
+      '<span class="warn">'+(b.bad ? "не распознано строк: "+b.bad : "")+'</span></div></div>';
+  }).join("");
+  $("#moviesList").innerHTML = S.movies.map(m => {
+    const ok = !!toEmbed(m.link);
+    return '<div class="card" data-kind="movies" data-id="'+m.id+'">'+
+      '<div class="card-h"><input type="text" id="t-'+m.id+'" data-f="title" value="'+esc(m.title)+'" aria-label="Название фильма"><span class="badge'+(ok?'':' zero')+'">'+(ok ? "показов: "+(m.plays||0) : "нет ссылки")+'</span></div>'+
+      '<input type="url" id="u-'+m.id+'" data-f="link" value="'+esc(m.link)+'" placeholder="https://rutube.ru/video/…" aria-label="Ссылка на фильм">'+
+      '<div class="foot"><button class="mini danger" data-act="del">Удалить</button><span class="warn">'+(m.link && !ok ? "ссылка не похожа на Рутуб" : "")+'</span></div></div>';
+  }).join("");
+  $("#backup").value = JSON.stringify(S);
+}
+function renderSettingsBadges(){ if (!$("#viewSet").hidden) renderSettings(); }
+const find = card => (card.dataset.kind === "series" ? S.series : S.movies).find(x => x.id === card.dataset.id);
+function refreshCard(card){
+  const it = find(card); if (!it) return;
+  const badge = card.querySelector(".badge"), warn = card.querySelector(".warn");
+  if (card.dataset.kind === "series"){
+    const b = seriesBadge(it); badge.textContent = b.text; badge.classList.toggle("zero", !b.n);
+    warn.textContent = b.bad ? "не распознано строк: " + b.bad : "";
+  } else {
+    const ok = !!toEmbed(it.link); badge.textContent = ok ? "показов: " + (it.plays||0) : "нет ссылки"; badge.classList.toggle("zero", !ok);
+    warn.textContent = it.link && !ok ? "ссылка не похожа на Рутуб" : "";
+  }
+  $("#backup").value = JSON.stringify(S);
+}
+$("#viewSet").addEventListener("input", e => {
+  const card = e.target.closest(".card"); if (!card) return;
+  const it = find(card), f = e.target.dataset.f; if (!it || !f) return;
+  if (f === "title") it.title = e.target.value;
+  if (f === "links") it.links = e.target.value.split(/\r?\n/);
+  if (f === "link") it.link = e.target.value.trim();
+  if (f === "pos") it.pos = Math.max(0, (parseInt(e.target.value, 10) || 1) - 1);
+  save(); refreshCard(card);
+});
+$("#viewSet").addEventListener("click", e => {
+  const btn = e.target.closest("[data-act]"); if (!btn) return;
+  const card = btn.closest(".card"), it = find(card); if (!it) return;
+  if (btn.dataset.act === "reset"){ it.pos = 0; save(); renderSettings(); }
+  if (btn.dataset.act === "del"){
+    if (!btn.classList.contains("armed")){ btn.classList.add("armed"); btn.textContent = "Точно удалить?"; setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Удалить"; }, 3000); return; }
+    const arr = card.dataset.kind === "series" ? S.series : S.movies;
+    arr.splice(arr.indexOf(it), 1); save(); renderSettings();
+  }
+});
+$("#addSeries").onclick = () => { const s = {id:uid(), title:"Новый сериал", links:[], pos:0}; S.series.unshift(s); save(); renderSettings(); const i = $("#t-"+s.id); i.focus(); i.select(); };
+$("#addMovie").onclick = () => { const m = {id:uid(), title:"Новый фильм", link:"", plays:0}; S.movies.unshift(m); save(); renderSettings(); const i = $("#t-"+m.id); i.focus(); i.select(); };
+const ra = $("#resetAll");
+ra.onclick = () => {
+  if (!ra.classList.contains("armed")){ ra.classList.add("armed"); ra.textContent = "Нажми ещё раз, чтобы сбросить"; setTimeout(() => { ra.classList.remove("armed"); ra.textContent = "Сбросить прогресс всех сериалов"; }, 3000); return; }
+  S.series.forEach(s => s.pos = 0); save(); renderSettings();
+};
+$("#bkCopy").onclick = async () => {
+  const ta = $("#backup"); ta.value = JSON.stringify(S);
+  try { await navigator.clipboard.writeText(ta.value); $("#bkMsg").textContent = "Скопировано."; }
+  catch(e){ ta.select(); $("#bkMsg").textContent = "Выделил текст, жми Ctrl+C."; }
+};
+$("#bkLoad").onclick = () => {
+  try {
+    const d = JSON.parse($("#backup").value);
+    if (!Array.isArray(d.series) || !Array.isArray(d.movies)) throw 0;
+    S = Object.assign(defaults(), d); save(); paintName(); paintSound(); setMode(S.mode); renderSettings();
+    $("#bkMsg").textContent = "Загружено.";
+  } catch(e){ $("#bkMsg").textContent = "Не получилось: в поле не бэкап FAB TV."; }
+};
+
+/* старт */
+paintName(); paintSound(); setMode(S.mode); show("idle");
+document.addEventListener("keydown", e => { if (e.target.matches("input,textarea")) return; if (e.key === "n" || e.key === "т") skip(); });
+})();
+</script>
+</body>
+</html>

@@ -512,7 +512,7 @@ function spin(pool, chosen, alive){
 }
 
 /* ---------- плеер Рутуба ---------- */
-let api = {seen:false, time:0, dur:0, state:""}, lowerT, playKick;
+let api = {seen:false, time:0, dur:0, state:""}, lowerT, playKick, silentT;
 function startPlayer(url, item, kind, label){
   for (const k in layers) layers[k].hidden = true;
   noiseOn = false; screen.classList.add("playing");
@@ -522,14 +522,17 @@ function startPlayer(url, item, kind, label){
   $("#bug").hidden = false;
   $("#lowTitle").textContent = item.title; $("#lowMeta").textContent = label;
   const low = $("#lower"); low.classList.add("show"); clearTimeout(lowerT); lowerT = setTimeout(() => low.classList.remove("show"), 6000);
-  setStatus("В эфире: <b>" + esc(item.title) + "</b> · " + esc(label));
+  const watch = url.replace("/play/embed/", "/video/").replace(/\?.*$/, "/");
+  setStatus("В эфире: <b>" + esc(item.title) + "</b> · " + esc(label) + ' · <a href="' + esc(watch) + '" target="_blank" rel="noopener" style="color:var(--cyan)">открыть на Рутубе</a>');
+  clearTimeout(silentT);
+  silentT = setTimeout(() => { if (playing && api.state !== "playing") setStatus("Плеер молчит: <b>" + esc(item.title) + "</b>. Кликни по экрану. Не помогло — жми «Пропустить» и проверь ссылку: " + '<a href="' + esc(watch) + '" target="_blank" rel="noopener" style="color:var(--cyan)">открыть на Рутубе</a>'); }, 20000);
   updateApi();
   // несколько раз пинаем плеер «играй», пока он не ответит
   clearInterval(playKick); let n = 0;
   playKick = setInterval(() => { if (api.state === "playing" || ++n > 12) return clearInterval(playKick); cmd("player:play"); }, 1500);
 }
 function stopPlayer(){
-  clearInterval(playKick); clearTimeout(lowerT);
+  clearInterval(playKick); clearTimeout(lowerT); clearTimeout(silentT);
   playing = null; player.hidden = true; player.src = "about:blank";
   $("#bug").hidden = true; $("#lower").classList.remove("show");
   screen.classList.remove("playing"); noiseOn = true;
@@ -552,6 +555,9 @@ window.addEventListener("message", e => {
   if (!api.seen){ api.seen = true; updateApi(); }
   switch (msg.type){
     case "player:ready": cmd("player:play"); break;
+    case "player:error":
+      if (!playing.done){ playing.done = true; setStatus("Рутуб не отдаёт видео «" + esc(playing.item.title) + "» (удалено или закрыто). Переключаем…"); setTimeout(() => { if (on) cycle(); }, 2500); }
+      break;
     case "player:changeState":
       api.state = d.state || "";
       if (api.state === "ended" || api.state === "completed") finished("плеер");
